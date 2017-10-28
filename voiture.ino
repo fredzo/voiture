@@ -10,7 +10,7 @@
 #include <AFMotor.h>
 
 // Vitesse minimum pour les moteurs (en dessous de cette vitesse, ils ne tournent pas)
-#define MIN_SPEED 120
+#define MIN_SPEED 40
 // Valeur médiane des joysticks
 #define MID_VALUE 127
 // Valeur pour virage sérré à gauche
@@ -47,6 +47,8 @@ int servo2pos = 10;
 int currentX = MID_VALUE;
 // Position courante du joystick gauche / droite
 int currentY = MID_VALUE;
+// Vitesse courante
+int currentSpeed = 127;
 // Vitesse courante du moteur gauche
 int speedLeft = 0;
 // Vitesse courante du moteur droit
@@ -129,16 +131,6 @@ void loop()
   delay(10);
 }
 
-// Variables globales pour le traitement des commandes de la liaison série bluetooth
-// Tableau qui va contenir la valeur en cours de lecture sous forme de chaine de caractères
-char valueString[4];
-// Commande en cours de lecture
-char command = 0;
-// Booléen qui permet de déterminer si on est arrivé à la fin de la commande (réception du caractère '\n')
-bool commandFound = false;
-// Position courante de lecture de la chaine de caractères
-int currentPosition = 0;
-
 /**
  * Traitement des données du port série blueetoth :
  * - Si on reçoit "x<valeur>\n" => position du joystick gauche / droite
@@ -148,77 +140,142 @@ int currentPosition = 0;
  */
 void processBluetoothSerial()
 {
-  if (Serial1.available()) 
+  if (Serial1.available()>=1) 
   { // Une commande est disponible
-    if(command == 0)
-    { // Lecture du premier caractère = commande
-      command = Serial1.read();
-    }
-    // On va lire le caractère suivants la commande qui correspondent à une valeur entre 0 et 255 terminé par un caractère de fin de ligne ("\n")
-    // Caractère qui vient d'être lu
-    char curChar;
-    while(Serial1.available() && (!commandFound) && (currentPosition < 4))
-    { // Tant qu'on n'a pas trouvé la fin de la commande ou dépassé la taille, on lit le port série
-      curChar = Serial1.read();
-      if(curChar == '\n')
-      { // On a trouvé le caractère de fin de commande
-        commandFound = true;
-        // Il faut mettre un 0 à la fin du tableau pour dire que c'est la fin de la chaine de caractères
-        valueString[currentPosition] = 0; // Fin de chaine de carractère
-      }
-      else
-      { // Lecture d'un caractère de la chaine représentant la valeur
-        valueString[currentPosition] = curChar;
-        // On passe à la position suivante
-        currentPosition++;
-      }
-    }
-    if(commandFound)
-    { // On a trouvé une commande => on convertir la chaine de caractères en entier
-      int value = atoi(valueString);
-      // On apelle la méthode de traitement de la commande
-      processCommand(command,value);
-      command = 0;
-      currentPosition = 0;
-      commandFound = false;
-    }
+    char curChar = Serial1.read();
+    Serial.println(curChar);
+    processCommand(curChar);
  }
 }
 
 /**
  * Traitement des commandes
- * @param command 'x' (position du joystick gauche / droite), 'y' (position du joystick avant /arrière), 'k' (klaxon) ou 'p' (phares)
- * @param value la valeur de la commande (de 0 à 255)
+ * @param command :
+Forward---------------------F
+Back-------------------------B
+Left---------------------------L
+Right-------------------------R
+Forward Left--------------G
+Forward Right------------I
+Back Left------------------H
+Back Right----------------J
+Stop-------------------------S
+Front Lights On---------W
+Front Lights Off---------w (lower case)
+Back Lights On---------U
+Back Lights Off---------u (lower case)
+Speed 0-------------------0
+Speed 10-----------------1
+Speed 20-----------------2
+Speed 30-----------------3
+Speed 40-----------------4
+Speed 50-----------------5
+Speed 60-----------------6
+Speed 70-----------------7
+Speed 80-----------------8
+Speed 90-----------------9
+Speed 100---------------q
+Everything OFF--------D
  */
-void processCommand(char command, int value)
+void processCommand(char command)
 {
-  /*Serial.print("Command : '");
-  Serial.write(command);
-  Serial.print("' value = ");
-  Serial.println(value,DEC);*/
   switch(command)
   {
-    case 'x':
+    case 'F':
+      // En avant
+      currentX = MID_VALUE+currentSpeed;
+      currentY = MID_VALUE;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'B':
+      // En arrière
+      currentX = MID_VALUE-currentSpeed;
+      currentY = MID_VALUE;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'L':
+      // A gauche
+      currentX = MID_VALUE;
+      currentY = MID_VALUE-currentSpeed;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'R':
+      // A droite
+      currentX = MID_VALUE;
+      currentY = MID_VALUE+currentSpeed;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'G':
+      // Avant gauche
+      currentX = MID_VALUE+currentSpeed;
+      currentY = MID_VALUE-currentSpeed;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'I':
+      // Avant droite
+      currentX = MID_VALUE+currentSpeed;
+      currentY = MID_VALUE+currentSpeed;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'H':
+      // Arrière gauche
+      currentX = MID_VALUE-currentSpeed;
+      currentY = MID_VALUE-currentSpeed;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'J':
+      // Arrière droite
+      currentX = MID_VALUE-currentSpeed;
+      currentY = MID_VALUE+currentSpeed;
+      // Mise à jour des moteurs
+      updateDcMotors();
+      break;
+    case 'S':
+    case 'D':
       // Mise à jour de la valeur x
-      currentX = value;
+      currentX = MID_VALUE;
+      currentY = MID_VALUE;
       // Mise à jour des moteurs
       updateDcMotors();
       break;
-    case 'y':
-      // Mise à jour de la valeur y
-      currentY = value;
-      // Mise à jour des moteurs
-      updateDcMotors();
-      break;
-    case 'k':
-      if(value > 0)
-      { // On joue le klaxon
-        klaxon();
-      }
-      break;
-    case 'p':
-      relay2 = !relay2;
+    case 'W':
+      relay2 = true;
       digitalWrite(31, relay2);
+      break;
+    case 'w':
+      relay2 = false;
+      digitalWrite(31, relay2);
+      break;
+    case 'U':
+      relay1 = true;
+      digitalWrite(30, relay1);
+      break;
+    case 'u':
+      relay1 = false;
+      digitalWrite(30, relay1);
+      break;
+    case 'V':
+    case 'v':
+      klaxon();
+      break;
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+      currentSpeed = map(command-'0', 0, 9, 0, 127);
       break;
   }
 }
@@ -312,7 +369,7 @@ void moveOneWay(int motorSpeed, bool goForward)
   if(speedLeft < MIN_SPEED) 
   {
     speedLeft = MIN_SPEED;
-    /*if(currentY <= RIGHT_TURN_THRESHOLD)
+    /*if(currentY <= LEFT_TURN_THRESHOLD)
     {
       motorLeftRun = RELEASE;
     }*/
@@ -320,7 +377,7 @@ void moveOneWay(int motorSpeed, bool goForward)
   if(speedRight < MIN_SPEED) 
   {
     speedRight = MIN_SPEED;
-    /*if(currentY >= LEFT_TURN_THRESHOLD)
+    /*if(currentY >= RIGHT_TURN_THRESHOLD)
     {
       motorRightRun = RELEASE;
     }*/
